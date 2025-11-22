@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pip-Boy 3000 Mark IV - Vault 13</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --pip-green: #1aff80;
+            --pip-dim: #0d5e35;
+            --pip-bg: #0a0c0a;
+            --crt-line: rgba(0, 0, 0, 0.2);
+            --scan-line: rgba(255, 255, 255, 0.05);
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            background-color: #050505;
+            overflow: hidden;
+            font-family: 'Share Tech Mono', monospace;
+            color: var(--pip-green);
+            user-select: none;
+        }
+
+        .text-pip { color: var(--pip-green); text-shadow: 0 0 5px var(--pip-green), 0 0 10px var(--pip-green); }
+        .text-dim { color: var(--pip-dim); }
+        .bg-pip { background-color: var(--pip-green); box-shadow: 0 0 10px var(--pip-green); }
+        .border-pip { border-color: var(--pip-green); box-shadow: 0 0 5px var(--pip-green), inset 0 0 5px var(--pip-green); }
+        
+        @keyframes flicker {
+            0% { opacity: 0.97; }
+            5% { opacity: 0.95; }
+            10% { opacity: 0.9; }
+            15% { opacity: 0.95; }
+            20% { opacity: 0.99; }
+            50% { opacity: 0.95; }
+            80% { opacity: 0.9; }
+            100% { opacity: 0.97; }
+        }
+
+        .crt-flicker {
+            animation: flicker 0.15s infinite;
+        }
+
+        .scanlines {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.2) 50%,
+                rgba(0,0,0,0.2)
+            );
+            background-size: 100% 4px;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 50;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        .noise {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 45;
+            opacity: 0.03;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        .vignette {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, rgba(0,0,0,0) 60%, rgba(0,0,0,0.8) 100%);
+            z-index: 51;
+            pointer-events: none;
+        }
+
+        @keyframes turnOn {
+            0% { transform: scale(1, 0.002); opacity: 0; filter: brightness(30); }
+            30% { transform: scale(1, 0.002); opacity: 1; filter: brightness(10); }
+            60% { transform: scale(1, 1); opacity: 1; filter: brightness(5); }
+            100% { transform: scale(1, 1); opacity: 1; filter: brightness(1); }
+        }
+        .tv-turn-on { animation: turnOn 0.4s cubic-bezier(0.23, 1, 0.32, 1) forwards; }
+
+        #boot-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 20000;
+            display: flex; flex-direction: column; justify-content: flex-start;
+            padding: 40px; font-family: 'VT323', monospace; font-size: 1.5rem;
+            color: var(--pip-green);
+            cursor: pointer;
+        }
+
+        #stand-by-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #111; z-index: 15000;
+            display: none; justify-content: center; align-items: center;
+        }
+        .test-card {
+            width: 320px; height: 240px;
+            background: #e0e0e0; border: 8px solid #333;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            position: relative;
+            box-shadow: 0 0 50px rgba(255,255,255,0.1);
+            animation: flicker 0.1s infinite;
+        }
+        .indian-head-circle {
+            width: 120px; height: 120px;
+            border: 4px solid #111; border-radius: 50%;
+            margin-bottom: 20px;
+            display: flex; align-items: center; justify-content: center;
+            background: conic-gradient(#333 0deg 20deg, transparent 20deg 360deg);
+        }
+        .indian-head-inner {
+            width: 80px; height: 80px; background: #333; border-radius: 50%;
+        }
+        .stand-by-text {
+            font-family: 'Share Tech Mono', sans-serif; font-weight: bold; font-size: 24px;
+            color: #111; border: 2px solid #111; padding: 5px 15px;
+        }
+
+        #vault-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 1s ease-out;
+        }
+
+        .gear-container {
+            width: 400px;
+            height: 400px;
+            position: relative;
+            perspective: 1000px;
+        }
+
+        .vault-door {
+            width: 100%;
+            height: 100%;
+            background: #2a2a2a;
+            border-radius: 50%;
+            position: relative;
+            border: 20px solid #5a5a5a;
+            box-shadow: inset 0 0 40px #000, 0 0 50px #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 3s cubic-bezier(0.6, -0.28, 0.735, 0.045), left 2s ease-in;
+            left: 0;
+            z-index: 10;
+        }
+
+        .steam-puff {
+            position: absolute;
+            width: 60px; height: 60px;
+            background: rgba(200,255,200,0.2);
+            border-radius: 50%;
+            filter: blur(15px);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 5;
+        }
+        @keyframes steam-anim {
+            0% { opacity: 0; transform: scale(0.5) translate(0,0); }
+            20% { opacity: 0.8; }
+            100% { opacity: 0; transform: scale(3) translate(var(--tx), var(--ty)); }
+        }
+
+        .cog-tooth {
+            position: absolute;
+            width: 40px;
+            height: 50px;
+            background: #5a5a5a;
+            top: -30px;
+            left: 50%;
+            margin-left: -20px;
+            transform-origin: 50% 230px;
+            border-radius: 4px;
+        }
+
+        .door-center {
+            width: 180px;
+            height: 180px;
+            background: #d4af37;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'VT323', monospace;
+            font-size: 80px;
+            font-weight: bold;
+            color: #222;
+            border: 10px solid #222;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+            position: relative;
+            z-index: 2;
+        }
+
+        .door-arm {
+            position: absolute;
+            width: 250px;
+            height: 20px;
+            background: #111;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(0deg);
+            z-index: 1;
+            border-radius: 10px;
+        }
+        
+        .door-arm:nth-child(2) { transform: translate(-50%, -50%) rotate(90deg); }
+
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both infinite; }
+        .rotate-door { transform: rotate(180deg) !important; }
+        .slide-out { transform: rotate(180deg) translateX(-150%) scale(0.8) !important; opacity: 0; }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        #pipboy-ui {
+            opacity: 0;
+            transition: opacity 2s ease-in;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+            background: radial-gradient(#0f140f, #000000);
+        }
+        #pipboy-ui.hidden {
+            display: none !important;
+        }
+
+        .pip-frame {
+            border: 2px solid var(--pip-green);
+            border-radius: 10px;
+            position: relative;
+            background: rgba(0, 20, 0, 0.2);
+            backdrop-filter: blur(2px);
+            box-shadow: 0 0 20px rgba(26, 255, 128, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .pip-header {
+            border-bottom: 2px solid var(--pip-green);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1.2rem;
+            background: rgba(26, 255, 128, 0.05);
+        }
+
+        .pip-nav {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            padding: 10px;
+            border-top: 2px solid var(--pip-green);
+            background: rgba(0,0,0,0.8);
+            pointer-events: auto;
+        }
+
+        .nav-btn {
+            background: transparent;
+            border: 1px solid var(--pip-green);
+            color: var(--pip-green);
+            padding: 8px 30px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            pointer-events: auto;
+        }
+
+        .nav-btn:hover, .nav-btn.active {
+            background: var(--pip-green);
+            color: black;
+            box-shadow: 0 0 15px var(--pip-green);
+            font-weight: bold;
+        }
+
+        .content-area {
+            flex-grow: 1;
+            position: relative;
+            padding: 20px;
+            overflow: hidden;
+            pointer-events: auto;
+        }
+
+        .health-grid {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            width: 100%;
+            max-width: 600px;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .limb-box {
+            border: 1px solid var(--pip-green);
+            padding: 5px;
+            text-align: center;
+            width: 60px;
+            margin: 5px auto;
+            opacity: 0.8;
+            font-size: 0.8rem;
+        }
+
+        .bar-container {
+            width: 100%;
+            height: 10px;
+            border: 1px solid var(--pip-green);
+            margin-top: 5px;
+            padding: 1px;
+        }
+        .bar-fill { height: 100%; background: var(--pip-green); width: 85%; }
+
+        .terminal-wrapper {
+            width: 100%;
+            height: 100%;
+            border: 4px solid var(--pip-dim);
+            background: #000500;
+            padding: 20px;
+            font-family: 'VT323', monospace;
+            font-size: 1.4rem;
+            line-height: 1.5;
+            color: var(--pip-green);
+            overflow-y: auto;
+            position: relative;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.9);
+        }
+        
+        .terminal-wrapper::-webkit-scrollbar { width: 12px; }
+        .terminal-wrapper::-webkit-scrollbar-track { background: #000; border-left: 1px solid var(--pip-green); }
+        .terminal-wrapper::-webkit-scrollbar-thumb { background: var(--pip-green); border: 2px solid #000; }
+
+        .terminal-header {
+            border-bottom: 2px dashed var(--pip-green);
+            margin-bottom: 15px;
+            padding-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .editable-area {
+            width: 100%;
+            height: calc(100% - 60px);
+            background: transparent;
+            border: none;
+            color: var(--pip-green);
+            outline: none;
+            resize: none;
+            font-family: 'VT323', monospace;
+            font-size: 1.4rem;
+        }
+
+        .cursor::after {
+            content: '█';
+            animation: cursor-blink 1s step-end infinite;
+        }
+
+        @keyframes cursor-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        svg.pip-svg {
+            fill: var(--pip-green);
+            filter: drop-shadow(0 0 5px var(--pip-green));
+            max-width: 200px;
+        }
+
+        .corner-deco {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border: 2px solid var(--pip-green);
+            z-index: 10;
+        }
+        .top-left { top: 10px; left: 10px; border-bottom: none; border-right: none; }
+        .top-right { top: 10px; right: 10px; border-bottom: none; border-left: none; }
+        .bottom-left { bottom: 10px; left: 10px; border-top: none; border-right: none; }
+        .bottom-right { bottom: 10px; right: 10px; border-top: none; border-left: none; }
+
+        .glitch-effect {
+            animation: glitch-anim 0.2s cubic-bezier(.25, .46, .45, .94) both infinite;
+        }
+        @keyframes glitch-anim {
+            0% { transform: translate(0); opacity: 1; }
+            20% { transform: translate(-3px, 3px); opacity: 0.8; }
+            40% { transform: translate(-3px, -3px); opacity: 1; }
+            60% { transform: translate(3px, 3px); opacity: 0.8; }
+            80% { transform: translate(3px, -3px); opacity: 1; }
+            100% { transform: translate(0); opacity: 1; }
+        }
+
+        .radio-btn {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 15px;
+            border: 1px solid var(--pip-green);
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: rgba(0, 20, 0, 0.3);
+            pointer-events: auto;
+        }
+        .radio-btn:hover {
+            background: var(--pip-green);
+            color: #000;
+            box-shadow: 0 0 15px var(--pip-green);
+        }
+        .radio-btn img {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border: 1px solid currentColor;
+        }
+        
+        .pip-img-filter {
+            filter: grayscale(100%) sepia(100%) hue-rotate(50deg) saturate(500%) contrast(1.2);
+        }
+        .radio-btn:hover .pip-img-filter {
+            filter: none;
+        }
+
+        .inv-note-item {
+            border: 1px dashed var(--pip-green);
+            margin-bottom: 5px;
+            padding: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1.1rem;
+            background: rgba(0, 20, 0, 0.2);
+        }
+        .inv-note-item:hover {
+            background: rgba(26, 255, 128, 0.1);
+        }
+        .delete-btn {
+            border: 1px solid var(--pip-green);
+            padding: 0 10px;
+            cursor: pointer;
+            font-family: 'Share Tech Mono';
+            text-transform: uppercase;
+        }
+        .delete-btn:hover {
+            background: var(--pip-green);
+            color: black;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="scanlines"></div>
+    <div class="noise"></div>
+    <div class="vignette"></div>
+
+    <div id="boot-screen" onclick="forceSkipIntro()" title="Haz clic para saltar intro">
+        <div id="boot-log"></div>
+        <div style="margin-top: auto; font-size: 1rem; color: #0d5e35; text-align: center; animation: flicker 2s infinite;">(CLICK SCREEN TO SKIP)</div>
+    </div>
+
+    <div id="stand-by-screen">
+        <div class="test-card">
+            <div class="indian-head-circle">
+                <div class="indian-head-inner"></div>
+            </div>
+            <div class="stand-by-text">PLEASE STAND BY</div>
+        </div>
+    </div>
+
+    <div id="vault-overlay">
+        <div class="gear-container">
+            <div class="vault-door" id="vaultDoor">
+                <div class="cog-tooth" style="transform: rotate(0deg) translate(0, -195px)"></div>
+                <div class="cog-tooth" style="transform: rotate(45deg) translate(0, -195px)"></div>
+                <div class="cog-tooth" style="transform: rotate(90deg) translate(0, -195px)"></div>
+                <div class="cog-tooth" style="transform: rotate(135deg) translate(0, -195px)"></div>
+                <div class="cog-tooth" style="transform: rotate(180deg) translate(0, -195px)"></div>
+                <div class="cog-tooth" style="transform: rotate(225deg) translate(0, -195px)"></div>
+                <div class="cog-tooth" style="transform: rotate(270deg) translate(0, -195px)"></div>
+                <div class="cog-tooth" style="transform: rotate(315deg) translate(0, -195px)"></div>
+
+                <div class="door-arm"></div>
+                <div class="door-arm"></div>
+
+                <div class="door-center">13</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="pipboy-ui" class="hidden">
+        <div class="pip-frame crt-flicker">
+            
+            <div class="corner-deco top-left"></div>
+            <div class="corner-deco top-right"></div>
+            <div class="corner-deco bottom-left"></div>
+            <div class="corner-deco bottom-right"></div>
+
+            <div class="pip-header">
+                <div>
+                    <span class="font-bold">PIP-BOY 3000</span> <span class="text-xs text-dim">MARK IV</span>
+                </div>
+                <div class="text-center text-sm">
+                    VAULT 13 — GOTY EDITION
+                </div>
+                <div id="clock">--:-- --</div>
+            </div>
+
+            <div class="content-area">
+                
+                <div id="section-stats" class="h-full w-full flex flex-col items-center justify-center fade-in">
+                    
+                    <div class="health-grid">
+                        <div class="flex flex-col gap-4 text-sm">
+                            <div>
+                                <div class="flex justify-between"><span>HP</span> <span>240/240</span></div>
+                                <div class="bar-container"><div class="bar-fill" style="width: 100%"></div></div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between"><span>AP</span> <span>90/110</span></div>
+                                <div class="bar-container"><div class="bar-fill" style="width: 80%"></div></div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between"><span>XP</span> <span>LVL 24</span></div>
+                                <div class="bar-container"><div class="bar-fill" style="width: 45%"></div></div>
+                            </div>
+                            <div class="mt-4 text-xs text-dim">
+                                <div class="flex justify-between"><span id="rads-display">RADS: 12</span></div>
+                                WEIGHT: 140/250
+                            </div>
+                        </div>
+
+                        <div class="flex justify-center items-center">
+                            <svg class="pip-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M30,30 Q30,10 50,10 Q70,10 70,30 Q70,50 50,50 Q30,50 30,30 Z" fill="none" stroke="currentColor" stroke-width="3"/>
+                                <path d="M30,25 Q35,5 50,5 Q65,5 70,20" fill="none" stroke="currentColor" stroke-width="3"/>
+                                <path d="M40,35 Q50,45 60,35" fill="none" stroke="currentColor" stroke-width="3"/>
+                                <path d="M35,50 L25,80 L40,90 L45,60 L55,60 L60,90 L75,80 L65,50" fill="none" stroke="currentColor" stroke-width="3"/>
+                                <path d="M65,50 L80,40 L85,45" fill="none" stroke="currentColor" stroke-width="3"/>
+                                <circle cx="85" cy="45" r="3" fill="currentColor"/>
+                            </svg>
+                        </div>
+
+                        <div class="flex flex-col items-center text-xs">
+                            <div class="limb-box">HEAD<br>100%</div>
+                            <div class="flex gap-1">
+                                <div class="limb-box">L.ARM<br>98%</div>
+                                <div class="limb-box">TORSO<br>100%</div>
+                                <div class="limb-box">R.ARM<br>100%</div>
+                            </div>
+                            <div class="flex gap-1">
+                                <div class="limb-box">L.LEG<br>100%</div>
+                                <div class="limb-box">R.LEG<br>95%</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-8 text-center animate-pulse">
+                        STATUS: <span class="font-bold">HEALTHY</span>
+                    </div>
+                </div>
+
+                <div id="section-terminal" class="h-full w-full hidden">
+                    <div class="terminal-wrapper">
+                        <div class="terminal-header">
+                            ROBCO INDUSTRIES (TM) TERMLINK PROTOCOL<br>
+                            USER: SURVIVOR // ACCESS: GRANTED
+                        </div>
+                        <div class="mb-4 text-dim">
+                            > SYSTEM READY.<br>
+                            > LOADING PERSONAL_NOTES.TXT...<br>
+                            > _
+                        </div>
+                        
+                        <div id="user-input" class="editable-area outline-none cursor" contenteditable="true" spellcheck="false" oninput="saveTerminal()">
+DIARY ENTRY #2287
+
+War. War never changes.
+Today I found a clean water source near the old Super Duper Mart. 
+Still need to find fusion cores for the Power Armor.
+
+Remember: Avoid the Red Rocket station at night. Feral Ghouls everywhere.
+
+(Click here to edit these notes...)</div>
+                    </div>
+                </div>
+
+                <div id="section-inv" class="h-full w-full hidden flex flex-col relative">
+                    <div class="border-b-2 border-pip-green mb-4 pb-2 flex justify-between items-center">
+                        <span>INVENTORY // QUICK NOTES</span>
+                        <span class="text-xs text-dim animate-pulse">SYNCING...</span>
+                    </div>
+                    
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="inv-input" class="bg-transparent border border-pip-green text-pip-green p-3 flex-grow font-mono focus:outline-none placeholder-green-900" placeholder="ADD ITEM OR NOTE..." onkeypress="handleEnter(event)">
+                        <button onclick="addInvNote()" class="border border-pip-green p-3 hover:bg-pip-green hover:text-black transition font-bold" onmouseenter="playSound('tick')">SAVE</button>
+                    </div>
+
+                    <div id="inv-list" class="flex-grow overflow-y-auto pr-2">
+                        
+                    </div>
+                </div>
+
+                <div id="section-radio" class="h-full w-full hidden overflow-y-auto">
+                    <div class="border-b-2 border-pip-green mb-4 pb-2 flex justify-between">
+                        <span>RADIO SIGNAL FREQUENCY</span>
+                        <span class="animate-pulse">● REC</span>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 gap-4">
+                        <div class="radio-btn" onclick="window.open('https://youtu.be/Yy9La6YXNqI?si=QFzjy1snCVe4ghJW', '_blank')" onmouseenter="playSound('tick')">
+                             <div class="w-[60px] h-[60px] border border-pip-green flex items-center justify-center bg-black pip-img-filter">
+                                <span class="text-4xl">💎</span>
+                             </div>
+                             <div>
+                                 <div class="font-bold text-xl">DIAMOND CITY RADIO</div>
+                                 <div class="text-xs text-dim">The Great Green Jewel</div>
+                             </div>
+                        </div>
+                        
+                        <div class="radio-btn" onclick="window.open('https://open.spotify.com/intl-es/album/0PYwJBzC2ekXwJX0YjKMwW', '_blank')" onmouseenter="playSound('tick')">
+                             <img src="https://i.scdn.co/image/ab67616d0000b2733395b5092625054a3546d993" class="pip-img-filter" alt="Classical" onerror="this.src='https://placehold.co/60x60/000/1aff80?text=CLASSIC'">
+                             <div>
+                                 <div class="font-bold text-xl">CLASSICAL RADIO</div>
+                                 <div class="text-xs text-dim">Music from the Institute?</div>
+                             </div>
+                        </div>
+
+                        <div class="radio-btn" onclick="window.open('https://open.spotify.com/playlist/1qhjOnHVYGhnUzTRCNMPAv', '_blank')" onmouseenter="playSound('tick')">
+                             <div class="w-[60px] h-[60px] border border-pip-green flex items-center justify-center bg-black pip-img-filter">
+                                <span class="text-4xl">★</span>
+                             </div>
+                             <div>
+                                 <div class="font-bold text-xl">RADIO LIBERTAD</div>
+                                 <div class="text-xs text-dim">Fighting the Good Fight</div>
+                             </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="pip-nav">
+                <button class="nav-btn active" onclick="switchTab('stats')" onmouseenter="playSound('tick')">STAT</button>
+                <button class="nav-btn" onclick="switchTab('inv')" onmouseenter="playSound('tick')">INV</button>
+                <button class="nav-btn" onclick="switchTab('terminal')" onmouseenter="playSound('tick')">DATA</button>
+                <button class="nav-btn" onclick="switchTab('map')" onmouseenter="playSound('tick')">MAP</button>
+                <button class="nav-btn" onclick="switchTab('radio')" onmouseenter="playSound('tick')">RADIO</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let skipped = false;
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'tick') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(50, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.05);
+            } else if (type === 'blip') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'type') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.03);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.03);
+            }
+        }
+
+        function updateClock() {
+            const now = new Date();
+            let hours = now.getHours();
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12; 
+            const dateStr = now.toLocaleDateString('en-US').toUpperCase();
+            
+            const clockEl = document.getElementById('clock');
+            if(clockEl) clockEl.innerText = `${dateStr} ${hours}:${minutes} ${ampm}`;
+        }
+
+        function updateRads() {
+            const radDisplay = document.getElementById('rads-display');
+            if(radDisplay) {
+                const base = 12;
+                const fluctuating = Math.floor(Math.random() * 5); 
+                radDisplay.innerText = `RADS: ${base + fluctuating}`;
+            }
+        }
+
+        function loadData() {
+            const savedTerminal = localStorage.getItem('pip-terminal');
+            if (savedTerminal) {
+                document.getElementById('user-input').innerText = savedTerminal;
+            }
+
+            const savedInv = JSON.parse(localStorage.getItem('pip-inventory') || '[]');
+            const list = document.getElementById('inv-list');
+            list.innerHTML = '';
+            
+            if (savedInv.length === 0) {
+                
+                addItemToDom("10mm Ammo (50)");
+                addItemToDom("Stimpacks (3)");
+            } else {
+                savedInv.forEach(item => addItemToDom(item));
+            }
+        }
+
+        function saveTerminal() {
+            const text = document.getElementById('user-input').innerText;
+            localStorage.setItem('pip-terminal', text);
+            playSound('type');
+        }
+
+        function saveInventory() {
+            const items = [];
+            document.querySelectorAll('#inv-list span').forEach(span => {
+                items.push(span.innerText.replace('> ', ''));
+            });
+            localStorage.setItem('pip-inventory', JSON.stringify(items));
+        }
+
+        function addItemToDom(text) {
+            const list = document.getElementById('inv-list');
+            const div = document.createElement('div');
+            div.className = 'inv-note-item fade-in';
+            div.innerHTML = `<span>> ${text}</span>`;
+            
+            const btn = document.createElement('button');
+            btn.className = 'delete-btn';
+            btn.innerText = 'DEL';
+            btn.onclick = function() {
+                div.remove();
+                saveInventory();
+                playSound('tick');
+            };
+            
+            div.appendChild(btn);
+            list.appendChild(div);
+        }
+
+        function phaseTwo() {
+            if(skipped) return;
+            
+            const bootScreen = document.getElementById('boot-screen');
+            const standBy = document.getElementById('stand-by-screen');
+            
+            bootScreen.style.display = 'none';
+            standBy.style.display = 'flex';
+            
+            setTimeout(phaseThree, 1500);
+        }
+
+        function phaseThree() {
+            if(skipped) return;
+
+            const standBy = document.getElementById('stand-by-screen');
+            const vaultOverlay = document.getElementById('vault-overlay');
+            const door = document.getElementById('vaultDoor');
+            const ui = document.getElementById('pipboy-ui');
+
+            standBy.style.display = 'none';
+            
+            createSteam(vaultOverlay);
+            
+            setTimeout(() => { if(!skipped) door.classList.add('shake'); }, 200);
+            setTimeout(() => { if(!skipped) { door.classList.remove('shake'); door.classList.add('rotate-door'); } }, 2000);
+            setTimeout(() => { if(!skipped) door.classList.add('slide-out'); }, 4000);
+            
+            setTimeout(() => {
+                if(!skipped) {
+                    vaultOverlay.style.opacity = '0';
+                    ui.classList.remove('hidden');
+                    ui.style.opacity = '1';
+                    setTimeout(() => { vaultOverlay.style.display = 'none'; }, 1000);
+                }
+            }, 5500);
+        }
+
+        function forceSkipIntro() {
+            initAudio();
+            playSound('blip');
+            
+            if(skipped) return;
+            skipped = true;
+            
+            console.log("Skipping intro...");
+            
+            const bootScreen = document.getElementById('boot-screen');
+            const standBy = document.getElementById('stand-by-screen');
+            const vaultOverlay = document.getElementById('vault-overlay');
+            const ui = document.getElementById('pipboy-ui');
+            
+            bootScreen.style.display = 'none';
+            standBy.style.display = 'none';
+            vaultOverlay.style.display = 'none';
+            
+            ui.classList.remove('hidden');
+            ui.style.opacity = '1';
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            console.log("System Architect: ItsCalps");
+
+            loadData();
+            setInterval(updateClock, 1000);
+            updateClock();
+            
+            setInterval(updateRads, 2000);
+
+            const bootScreen = document.getElementById('boot-screen');
+            const bootLog = document.getElementById('boot-log');
+
+            bootScreen.classList.add('tv-turn-on');
+
+            const lines = [
+                "ROBCO INDUSTRIES (TM) TERMLINK",
+                "COPYRIGHT 2075-2077 ROBCO INDUSTRIES",
+                "SYS_ADMIN: ItsCalps",
+                "> SERVER STARTUP...",
+                "> CHECKING MEMORY... 64KB OK",
+                "> LOADING KERNEL...",
+                "> MOUNTING HOLOTAPES...",
+                "> EXECUTING VAULT-TEC.EXE",
+                "> INITIALIZING..."
+            ];
+            
+            let i = 0;
+            const p = document.createElement('div');
+            p.innerText = lines[0];
+            bootLog.appendChild(p);
+            i++;
+
+            const interval = setInterval(() => {
+                if(skipped) {
+                    clearInterval(interval);
+                    return;
+                }
+
+                if(i < lines.length) {
+                    const p = document.createElement('div');
+                    p.innerText = lines[i];
+                    bootLog.appendChild(p);
+                    i++;
+                } else {
+                    clearInterval(interval);
+                    setTimeout(phaseTwo, 800);
+                }
+            }, 150);
+            
+            document.addEventListener('click', initAudio, { once: true });
+        });
+
+        function createSteam(container) {
+            const angles = [0, 45, 90, 135, 180, 225, 270, 315];
+            angles.forEach((ang, index) => {
+                setTimeout(() => {
+                    if(skipped) return;
+                    const puff = document.createElement('div');
+                    puff.className = 'steam-puff';
+                    puff.style.left = 'calc(50% - 30px)';
+                    puff.style.top = 'calc(50% - 30px)';
+                    
+                    const rad = ang * (Math.PI / 180);
+                    const tx = Math.cos(rad) * 150 + 'px';
+                    const ty = Math.sin(rad) * 150 + 'px';
+                    
+                    puff.style.setProperty('--tx', tx);
+                    puff.style.setProperty('--ty', ty);
+                    puff.style.animation = 'steam-anim 1.2s ease-out forwards';
+                    
+                    container.appendChild(puff);
+                }, index * 50);
+            });
+        }
+
+        function switchTab(tabName) {
+            playSound('blip');
+            
+            if (tabName === 'map') {
+                window.open('https://wand.com/es/maps/fallout-4/commonwealth', '_blank');
+                return; 
+            }
+
+            const sections = {
+                'stats': document.getElementById('section-stats'),
+                'terminal': document.getElementById('section-terminal'),
+                'inv': document.getElementById('section-inv'),
+                'radio': document.getElementById('section-radio')
+            };
+            
+            const btns = document.querySelectorAll('.nav-btn');
+
+            Object.values(sections).forEach(sec => {
+                if(sec) sec.classList.add('hidden');
+            });
+            
+            btns.forEach(b => b.classList.remove('active'));
+
+            if (sections[tabName]) {
+                sections[tabName].classList.remove('hidden');
+            }
+
+            if (tabName === 'stats') btns[0].classList.add('active');
+            if (tabName === 'inv') {
+                btns[1].classList.add('active');
+                const inv = sections['inv'];
+                inv.classList.add('glitch-effect');
+                setTimeout(() => inv.classList.remove('glitch-effect'), 400);
+            }
+            if (tabName === 'terminal') btns[2].classList.add('active');
+            if (tabName === 'radio') btns[4].classList.add('active');
+        }
+
+        function addInvNote() {
+            playSound('blip');
+            const input = document.getElementById('inv-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            addItemToDom(text);
+            saveInventory();
+            
+            input.value = '';
+            input.focus();
+        }
+
+        function handleEnter(e) {
+            if (e.key === 'Enter') addInvNote();
+        }
+
+    </script>
+</body>
+</html>
